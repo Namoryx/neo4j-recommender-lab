@@ -20,6 +20,14 @@ const hintSteps = document.getElementById('hint-steps');
 let currentQuest = null;
 let progress = loadProgress();
 let revealedHintCount = 0;
+const counterEl = document.getElementById('progress-counter');
+const textarea = document.getElementById('cypher-input');
+const feedbackEl = document.getElementById('feedback');
+const runBtn = document.getElementById('run-btn');
+const resetBtn = document.getElementById('reset-btn');
+
+let currentQuest = null;
+let progress = loadProgress();
 
 function computeScore() {
   const completed = Object.values(progress).filter((p) => p.completedAt).length;
@@ -40,6 +48,11 @@ function renderQuestList() {
     const status = document.createElement('span');
     status.className = 'quest-status';
     status.textContent = progress[quest.id]?.completedAt ? '완료' : '미완료';
+    label.textContent = quest.title;
+
+    const status = document.createElement('span');
+    status.className = 'quest-status';
+    status.textContent = progress[quest.id] ? '완료' : '미완료';
 
     if (currentQuest?.id === quest.id) {
       item.classList.add('active');
@@ -50,6 +63,7 @@ function renderQuestList() {
     questListEl.appendChild(item);
   });
 
+  counterEl.textContent = `${Object.keys(progress).length} / ${quests.length}`;
   computeScore();
 }
 
@@ -66,6 +80,14 @@ function selectQuest(id) {
   feedbackEl.textContent = '결과가 여기 표시됩니다.';
   feedbackEl.className = 'feedback muted';
   renderHints();
+
+  titleEl.textContent = quest.title;
+  descEl.textContent = quest.description;
+  objectiveEl.textContent = quest.description;
+  questIdEl.textContent = quest.id;
+  textarea.value = progress[quest.id]?.answer || '';
+  feedbackEl.textContent = '결과가 여기 표시됩니다.';
+  feedbackEl.className = 'feedback muted';
 
   renderQuestList();
 }
@@ -111,6 +133,7 @@ function handleSubmit() {
     denyWrite: currentQuest.denyWrite
   };
   const result = checkQuery(userQuery, rule);
+  const result = checkQuery(userQuery, currentQuest.check);
 
   feedbackEl.textContent = result.message;
   feedbackEl.className = `feedback ${result.passed ? 'success' : 'error'}`;

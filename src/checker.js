@@ -56,4 +56,8 @@ export function checkQuery(query, rule) {
         message: '채점 규칙을 찾을 수 없습니다. 쿼리를 다시 확인하세요.'
       };
   }
+  return {
+    passed: false,
+    message: '조건에 맞지 않습니다. 힌트: ' + (rule.hint || '패턴을 다시 확인하세요.')
+  };
 }
