@@ -173,7 +173,9 @@ async function runQuery(query) {
     return normalized;
   } catch (err) {
     console.error(err);
-    feedbackEl.textContent = `실행 실패: ${err.message || '서버에 연결할 수 없습니다.'}`;
+    const guidance = 'CORS 설정, Worker URL, 배포 상태를 다시 확인하세요.';
+    const reason = err.message || '서버에 연결할 수 없습니다.';
+    feedbackEl.textContent = `실행 실패: ${reason} (${guidance})`;
     feedbackEl.className = 'feedback error';
     return null;
   } finally {

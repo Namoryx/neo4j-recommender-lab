@@ -32,6 +32,21 @@ function validateQuery(raw) {
   return { ok: true, query: finalQuery };
 }
 
+function validateEnv(env) {
+  const required = ['NEO4J_URI', 'NEO4J_USER', 'NEO4J_PASSWORD'];
+  const missing = required.filter((key) => !env?.[key]);
+
+  if (missing.length) {
+    const joined = missing.join(', ');
+    return {
+      ok: false,
+      reason: `필수 환경변수(${joined})가 누락되었습니다. wrangler.toml과 Worker Secrets 설정을 확인하세요.`,
+    };
+  }
+
+  return { ok: true };
+}
+
 async function executeCypher(query, env, signal) {
   const endpoint = `${env.NEO4J_URI.replace(/\/?$/, '')}/db/neo4j/tx/commit`;
   const payload = {
@@ -81,6 +96,11 @@ export default {
 
     if (pathname !== '/run' || request.method !== 'POST') {
       return new Response('Not Found', { status: 404, headers: corsHeaders });
+    }
+
+    const envValidation = validateEnv(env);
+    if (!envValidation.ok) {
+      return errorResponse(envValidation.reason, 500);
     }
 
     let cypher;
