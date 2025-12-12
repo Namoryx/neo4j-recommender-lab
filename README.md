@@ -13,6 +13,9 @@ See the full game design, track map, and UX/stack blueprint in [`docs/game-desig
 A static, in-browser prototype that mirrors the intended 3-panel UX and result-based grading loop ships with `index.html` at the repo root (referencing assets in `web/`).
 
 1. Start a local server from the repo root: `python -m http.server 8000` (then open `http://localhost:8000/index.html`).
+A static, in-browser prototype that mirrors the intended 3-panel UX and result-based grading loop lives in `web/`:
+
+1. Start a local server: `python -m http.server 8000 -d web` (or open `web/index.html` directly).
 2. Pick a mission (connectivity, Cypher basics, paths, recommender ranking) from the dropdown.
 3. Edit the Cypher template, run & grade, and view feedback plus mock graph context.
 
