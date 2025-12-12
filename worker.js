@@ -1,8 +1,40 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
+
+const SEED_CYPHER = `
+UNWIND [
+  { name: "Alice", email: "alice@example.com" },
+  { name: "Bob", email: "bob@example.com" },
+  { name: "Charlie", email: "charlie@example.com" }
+] AS userData
+MERGE (u:User {email: userData.email})
+SET u.name = userData.name
+WITH collect(u) AS users
+UNWIND [
+  { title: "Graph Algorithms", category: "Book" },
+  { title: "Cypher Mastery", category: "Course" },
+  { title: "Building Recommenders", category: "Workshop" }
+] AS itemData
+MERGE (i:Item {title: itemData.title})
+SET i.category = itemData.category
+WITH users, collect(i) AS items
+UNWIND [
+  { email: "alice@example.com", title: "Graph Algorithms", score: 0.92 },
+  { email: "alice@example.com", title: "Cypher Mastery", score: 0.85 },
+  { email: "bob@example.com", title: "Building Recommenders", score: 0.9 },
+  { email: "charlie@example.com", title: "Graph Algorithms", score: 0.73 },
+  { email: "charlie@example.com", title: "Building Recommenders", score: 0.66 }
+] AS interaction
+MATCH (u:User {email: interaction.email})
+MATCH (i:Item {title: interaction.title})
+MERGE (u)-[r:INTERACTED]->(i)
+SET r.score = interaction.score;
+`;
+
+const SEED_CHECK_QUERY = 'MATCH (u:User) RETURN count(u) AS users';
 
 function errorResponse(message, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
@@ -94,13 +126,45 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    if (pathname !== '/run' || request.method !== 'POST') {
-      return new Response('Not Found', { status: 404, headers: corsHeaders });
+    if (pathname === '/health' && request.method === 'GET') {
+      return new Response('neo4j-runner v3 (seed-enabled)', { headers: corsHeaders });
     }
 
     const envValidation = validateEnv(env);
     if (!envValidation.ok) {
       return errorResponse(envValidation.reason, 500);
+    }
+
+    if (pathname === '/seed' && request.method === 'POST') {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const check = await executeCypher(SEED_CHECK_QUERY, env, controller.signal);
+        const users = Number(check.rows?.[0]?.[0] || 0);
+        if (users > 0) {
+          return new Response(JSON.stringify({ ok: false, error: 'already seeded' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        await executeCypher(SEED_CYPHER, env, controller.signal);
+        return new Response(JSON.stringify({ ok: true, seeded: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      } catch (err) {
+        const status = err.name === 'AbortError' ? 504 : 400;
+        const message = err.name === 'AbortError' ? '쿼리 실행이 시간 과되었습니다.' : err.message;
+        return errorResponse(message, status);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    if (pathname !== '/run' || request.method !== 'POST') {
+      return new Response('Not Found', { status: 404, headers: corsHeaders });
     }
 
     let cypher;
@@ -131,7 +195,7 @@ export default {
       });
     } catch (err) {
       const status = err.name === 'AbortError' ? 504 : 400;
-      const message = err.name === 'AbortError' ? '쿼리 실행이 시간 초과되었습니다.' : err.message;
+      const message = err.name === 'AbortError' ? '쿼리 실행이 시간 과되었습니다.' : err.message;
       return errorResponse(message, status);
     } finally {
       clearTimeout(timeoutId);
