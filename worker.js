@@ -6,38 +6,71 @@ const corsHeaders = {
 
 const SEED_CYPHER = `
 UNWIND [
-  { name: "Alice", email: "alice@example.com" },
-  { name: "Bob", email: "bob@example.com" },
-  { name: "Charlie", email: "charlie@example.com" }
-] AS userData
-MERGE (u:User {email: userData.email})
-SET u.name = userData.name
-WITH collect(u) AS users
+  {id:"U1", name:"Alice"},
+  {id:"U2", name:"Bob"},
+  {id:"U3", name:"Chloe"},
+  {id:"U4", name:"Dan"},
+  {id:"U5", name:"Evan"}
+] AS u
+MERGE (x:User {id:u.id}) SET x.name = u.name;
+
 UNWIND [
-  { title: "Graph Algorithms", category: "Book" },
-  { title: "Cypher Mastery", category: "Course" },
-  { title: "Building Recommenders", category: "Workshop" }
-] AS itemData
-MERGE (i:Item {title: itemData.title})
-SET i.category = itemData.category
-WITH users, collect(i) AS items
+  {id:"P1", name:"Whisky A", category:"Whisky"},
+  {id:"P2", name:"Whisky B", category:"Whisky"},
+  {id:"P3", name:"Whisky C", category:"Whisky"},
+  {id:"P4", name:"Coffee Beans", category:"Coffee"},
+  {id:"P5", name:"Dripper", category:"Coffee"},
+  {id:"P6", name:"Mug", category:"Coffee"},
+  {id:"P7", name:"Protein Bar", category:"Fitness"},
+  {id:"P8", name:"Yoga Mat", category:"Fitness"}
+] AS p
+MERGE (y:Product {id:p.id})
+SET y.name = p.name, y.category = p.category;
+
 UNWIND [
-  { email: "alice@example.com", title: "Graph Algorithms", score: 0.92 },
-  { email: "alice@example.com", title: "Cypher Mastery", score: 0.85 },
-  { email: "bob@example.com", title: "Building Recommenders", score: 0.9 },
-  { email: "charlie@example.com", title: "Graph Algorithms", score: 0.73 },
-  { email: "charlie@example.com", title: "Building Recommenders", score: 0.66 }
-] AS interaction
-MATCH (u:User {email: interaction.email})
-MATCH (i:Item {title: interaction.title})
-MERGE (u)-[r:INTERACTED]->(i)
-SET r.score = interaction.score;
+  {u:"U1", p:"P1", t:"VIEWED"},
+  {u:"U1", p:"P2", t:"VIEWED"},
+  {u:"U1", p:"P1", t:"ADDED_TO_CART"},
+  {u:"U1", p:"P1", t:"PURCHASED"},
+
+  {u:"U2", p:"P1", t:"VIEWED"},
+  {u:"U2", p:"P3", t:"VIEWED"},
+  {u:"U2", p:"P3", t:"ADDED_TO_CART"},
+  {u:"U2", p:"P3", t:"PURCHASED"},
+
+  {u:"U3", p:"P4", t:"VIEWED"},
+  {u:"U3", p:"P5", t:"VIEWED"},
+  {u:"U3", p:"P4", t:"PURCHASED"},
+  {u:"U3", p:"P5", t:"ADDED_TO_CART"},
+
+  {u:"U4", p:"P4", t:"VIEWED"},
+  {u:"U4", p:"P6", t:"VIEWED"},
+  {u:"U4", p:"P6", t:"PURCHASED"},
+
+  {u:"U5", p:"P7", t:"VIEWED"},
+  {u:"U5", p:"P8", t:"ADDED_TO_CART"},
+  {u:"U5", p:"P8", t:"PURCHASED"}
+] AS e
+MATCH (u:User {id:e.u}), (p:Product {id:e.p})
+FOREACH (_ IN CASE WHEN e.t="VIEWED" THEN [1] ELSE [] END |
+  MERGE (u)-[r:VIEWED]->(p)
+  ON CREATE SET r.count=1
+  ON MATCH SET r.count=r.count+1
+)
+FOREACH (_ IN CASE WHEN e.t="ADDED_TO_CART" THEN [1] ELSE [] END |
+  MERGE (u)-[r:ADDED_TO_CART]->(p)
+  ON CREATE SET r.count=1
+  ON MATCH SET r.count=r.count+1
+)
+FOREACH (_ IN CASE WHEN e.t="PURCHASED" THEN [1] ELSE [] END |
+  MERGE (u)-[r:PURCHASED]->(p)
+  ON CREATE SET r.count=1
+  ON MATCH SET r.count=r.count+1
+);
 `;
 
-const SEED_CHECK_QUERY = 'MATCH (u:User) RETURN count(u) AS users';
-
 function errorResponse(message, status = 400) {
-  return new Response(JSON.stringify({ error: message }), {
+  return new Response(JSON.stringify({ ok: false, error: message }), {
     status,
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
@@ -62,21 +95,6 @@ function validateQuery(raw) {
   const finalQuery = needsLimit ? `${cleaned} LIMIT 100` : cleaned;
 
   return { ok: true, query: finalQuery };
-}
-
-function validateEnv(env) {
-  const required = ['NEO4J_URI', 'NEO4J_USER', 'NEO4J_PASSWORD'];
-  const missing = required.filter((key) => !env?.[key]);
-
-  if (missing.length) {
-    const joined = missing.join(', ');
-    return {
-      ok: false,
-      reason: `필수 환경변수(${joined})가 누락되었습니다. wrangler.toml과 Worker Secrets 설정을 확인하세요.`,
-    };
-  }
-
-  return { ok: true };
 }
 
 async function executeCypher(query, env, signal) {
@@ -113,9 +131,72 @@ async function executeCypher(query, env, signal) {
 
   const result = body.results?.[0];
   return {
-    columns: result?.columns || [],
-    rows: (result?.data || []).map((item) => item.row),
+    fields: result?.columns || [],
+    values: (result?.data || []).map((item) => item.row),
   };
+}
+
+async function handleRun(request, env) {
+  let cypher;
+  try {
+    const body = await request.json();
+    cypher = body?.cypher;
+  } catch (err) {
+    return errorResponse('잘못된 JSON 요청입니다.');
+  }
+
+  if (typeof cypher !== 'string') {
+    return errorResponse('cypher 필드가 필요합니다.');
+  }
+
+  const validation = validateQuery(cypher);
+  if (!validation.ok) {
+    return errorResponse(validation.reason, 400);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const result = await executeCypher(validation.query, env, controller.signal);
+    return new Response(JSON.stringify({ ok: true, ...result }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  } catch (err) {
+    const status = err.name === 'AbortError' ? 504 : 400;
+    const message = err.name === 'AbortError' ? '쿼리 실행이 시간 초과되었습니다.' : err.message;
+    return errorResponse(message, status);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function handleSeed(env) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const check = await executeCypher('MATCH (u:User) RETURN count(u) AS users', env, controller.signal);
+    const already = Number(check.values?.[0]?.[0] ?? 0) > 0;
+    if (already) {
+      return new Response(JSON.stringify({ ok: true, seeded: false, error: 'already seeded' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    await executeCypher(SEED_CYPHER, env, controller.signal);
+    return new Response(JSON.stringify({ ok: true, seeded: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  } catch (err) {
+    const status = err.name === 'AbortError' ? 504 : 400;
+    const message = err.name === 'AbortError' ? 'Seed가 시간 초과되었습니다.' : err.message;
+    return errorResponse(message, status);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export default {
@@ -130,75 +211,14 @@ export default {
       return new Response('neo4j-runner v3 (seed-enabled)', { headers: corsHeaders });
     }
 
-    const envValidation = validateEnv(env);
-    if (!envValidation.ok) {
-      return errorResponse(envValidation.reason, 500);
-    }
-
     if (pathname === '/seed' && request.method === 'POST') {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      try {
-        const check = await executeCypher(SEED_CHECK_QUERY, env, controller.signal);
-        const users = Number(check.rows?.[0]?.[0] || 0);
-        if (users > 0) {
-          return new Response(JSON.stringify({ ok: false, error: 'already seeded' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          });
-        }
-
-        await executeCypher(SEED_CYPHER, env, controller.signal);
-        return new Response(JSON.stringify({ ok: true, seeded: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        });
-      } catch (err) {
-        const status = err.name === 'AbortError' ? 504 : 400;
-        const message = err.name === 'AbortError' ? '쿼리 실행이 시간 과되었습니다.' : err.message;
-        return errorResponse(message, status);
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      return handleSeed(env);
     }
 
-    if (pathname !== '/run' || request.method !== 'POST') {
-      return new Response('Not Found', { status: 404, headers: corsHeaders });
+    if (pathname === '/run' && request.method === 'POST') {
+      return handleRun(request, env);
     }
 
-    let cypher;
-    try {
-      const body = await request.json();
-      cypher = body?.cypher;
-    } catch (err) {
-      return errorResponse('잘못된 JSON 요청입니다.');
-    }
-
-    if (typeof cypher !== 'string') {
-      return errorResponse('cypher 필드가 필요합니다.');
-    }
-
-    const validation = validateQuery(cypher);
-    if (!validation.ok) {
-      return errorResponse(validation.reason, 400);
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const result = await executeCypher(validation.query, env, controller.signal);
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    } catch (err) {
-      const status = err.name === 'AbortError' ? 504 : 400;
-      const message = err.name === 'AbortError' ? '쿼리 실행이 시간 과되었습니다.' : err.message;
-      return errorResponse(message, status);
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return new Response('Not Found', { status: 404, headers: corsHeaders });
   },
 };

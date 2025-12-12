@@ -1,25 +1,28 @@
-# Neo4j Recommender Lab
+# Neo4j Cypher Quest (GitHub Pages + Cloudflare Workers)
 
-## GitHub Pages → Worker → 렌더 → Submit 흐름 점검 체크리스트
-배포 후 다음 순서대로 점검하여 GitHub Pages와 Worker 사이의 전체 흐름을 검증하세요.
+정적 GitHub Pages 프론트엔드와 Cloudflare Worker 백엔드로 동작하는 Cypher 학습 게임 MVP입니다. DB가 비어있어도 깨지지 않도록 Seed 버튼을 통해 샘플 데이터를 주입한 뒤 추천/유저/상품 퀘스트를 진행합니다.
 
-1. **GitHub Pages 로딩 확인**
-   - Pages URL을 브라우저에서 열어 UI가 정상적으로 렌더되는지 확인합니다.
-   - 개발자 도구 Network 탭에서 정적 자산(`index.html`, `assets/`, `src/`)이 200 상태 코드로 내려오는지 확인합니다.
-2. **Worker 배포 및 헬스체크**
-   - `wrangler deploy`로 최신 Worker를 배포합니다.
-   - `${API_BASE}/health` 엔드포인트에 GET 요청을 보내 200 응답이 오는지 확인합니다.
-3. **Worker 엔드포인트 POST 200 확인**
-   - `src/app.js`의 `WORKER_ENDPOINT`가 실제 배포된 Worker 주소로 설정되어 있는지 확인합니다.
-   - Network 탭에서 `run`으로 향하는 POST 요청이 200으로 응답하는지, 응답 본문에 `columns`, `rows` 필드가 포함되는지 확인합니다.
-4. **결과 렌더링 검증**
-   - Run 버튼을 눌러 샘플 Cypher를 실행하고 결과 테이블이 브라우저에 표시되는지 확인합니다.
-   - 응답이 없거나 에러일 경우 CORS/URL/배포 상태 문구가 노출되는지 확인합니다.
-5. **Submit 정/오답 흐름 확인**
-   - Submit 버튼을 눌러 결과가 정답이면 성공 피드백과 다음 퀘스트로 이동하는지 확인합니다.
-   - 오답일 경우 피드백이 표시되고 진행 상황이 저장되는지 확인합니다.
-6. **데이터 시드 확인**
-   - GitHub Pages 화면에서 **Seed** 버튼을 눌러 시드 작업을 수행합니다.
-   - `MATCH (u:User) RETURN count(u)` 퀘스트를 실행해 사용자 노드가 존재하는지 확인합니다.
+## 빠른 시작 (GitHub Pages)
+1. 이 리포지토리를 GitHub Pages에 배포합니다(메인 브랜치, 루트). 별도 빌드 과정은 없습니다.
+2. 페이지에 접속하면 Worker 헬스 상태와 Seed 필요 여부를 확인합니다.
+3. DB가 비어있다면 **데이터 초기화(Seed)** 버튼을 눌러 샘플 그래프를 생성합니다.
+4. Seed가 끝나면 Post-Seed 퀘스트(유저/상품/추천)가 활성화됩니다.
 
-> 위 순서를 모두 통과하면 GitHub Pages 정적 호스팅부터 Cloudflare Worker 실행, 결과 렌더, 정답 체크까지 엔드투엔드 동작이 검증됩니다.
+## Worker 엔드포인트
+- `POST https://neo4j-runner.neo4j-namoryx.workers.dev/run`
+- `POST https://neo4j-runner.neo4j-namoryx.workers.dev/seed`
+- `GET  https://neo4j-runner.neo4j-namoryx.workers.dev/health`
+
+### Worker URL 교체 방법
+프론트엔드 `js/api.js`의 `API_BASE` 값을 배포한 Worker 도메인으로 변경합니다.
+
+## 퀘스트 구성/추가 방법
+- `js/game.js`의 `quests` 배열을 수정합니다.
+- `group: 'pre'` 퀘스트는 데이터가 없어도 실행 가능하며 Seed 이전에 제공됩니다.
+- `group: 'post'` 퀘스트는 Seed 완료 후 자동 활성화됩니다.
+- 각 퀘스트는 `starterCypher`, `hints`, `checker(result)`를 갖습니다. `checker`에서 결과를 해석해 `{correct, feedback}`을 반환하세요.
+
+## 배포 체크리스트
+- `wrangler deploy`로 Worker를 배포하고 `/health` 응답을 확인합니다.
+- GitHub Pages 페이지를 열어 Seed 버튼을 눌러 샘플 데이터를 생성합니다.
+- `MATCH (n) RETURN count(n)` 결과가 0보다 크고, 퀘스트 제출/채점이 정상 동작하는지 확인합니다.

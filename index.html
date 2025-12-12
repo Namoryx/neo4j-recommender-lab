@@ -3,83 +3,79 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Neo4j Cypher Quest</title>
-  <link rel="stylesheet" href="./assets/style.css">
+  <title>Neo4j Cypher Quest MVP</title>
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="frame">
-      <div class="brand">
-        <span class="dot"></span>
-        <span class="title">Neo4j Cypher Quest</span>
-      </div>
-      <div class="top-meta">
-        <div class="pill" aria-live="polite">퀘스트 ID: <strong id="quest-id">-</strong></div>
-        <div class="pill score">점수: <strong id="score">0</strong></div>
-        <div class="top-actions">
-          <button id="seed-btn" class="ghost seed-btn">데이터 초기화(Seed)</button>
-          <button id="run-btn" class="ghost">Run</button>
-          <button id="submit-btn" class="primary">Submit</button>
-        </div>
-      </div>
+    <div class="top-left">
+      <div class="brand">Neo4j Cypher Quest</div>
+      <div id="health-indicator" class="pill subtle">Worker: ...</div>
+    </div>
+    <div class="top-right">
+      <div class="pill" aria-live="polite">퀘스트: <strong id="quest-id">-</strong></div>
+      <div class="pill score">점수: <strong id="score">0</strong></div>
+      <button id="seed-btn" class="ghost">데이터 초기화(Seed)</button>
+      <button id="run-btn" class="ghost">Run</button>
+      <button id="submit-btn" class="primary">Submit</button>
     </div>
   </header>
 
-  <main class="frame workspace">
-    <aside class="left-panel panel">
-      <div class="quest-meta">
+  <main class="layout">
+    <aside class="left">
+      <section class="panel">
         <p class="eyebrow">스토리</p>
         <h2 id="quest-title">퀘스트 제목</h2>
-        <p id="quest-desc" class="muted">설명 및 서사가 여기에 표시됩니다.</p>
-      </div>
+        <p id="quest-desc" class="muted">게임이 로드되는 중입니다.</p>
+      </section>
 
-      <div class="objective">
+      <section class="panel">
         <div class="panel-heading">목표</div>
-        <p id="quest-objective">Cypher로 수행해야 할 목표가 요약됩니다.</p>
-      </div>
+        <p id="quest-objective" class="muted">Cypher로 달성해야 할 목표를 확인하세요.</p>
+      </section>
 
-      <div class="hint-block">
+      <section class="panel">
         <div class="panel-heading">힌트</div>
         <button id="hint-btn" class="full">힌트 보기</button>
-        <ol id="hint-steps" class="hint-steps">
-          <li>힌트를 단계적으로 노출하도록 설계하세요.</li>
-          <li>필요 시 Neo4j Docs를 참고하세요.</li>
-        </ol>
-      </div>
+        <ol id="hint-steps" class="hint-steps"></ol>
+      </section>
 
-      <div class="quest-list">
-        <div class="panel-heading">퀘스트 선택</div>
-        <ul id="quest-list"></ul>
-        <div class="progress" aria-label="progress">진행도: <span id="progress-counter">0 / 0</span></div>
-      </div>
+      <section class="panel">
+        <div class="panel-heading">퀘스트 목록</div>
+        <ul id="quest-list" class="quest-list"></ul>
+        <div class="progress">진행도: <span id="progress-counter">0 / 0</span></div>
+      </section>
     </aside>
 
-    <section class="right-panel">
-      <div class="panel editor-panel">
+    <section class="right">
+      <section class="panel editor">
         <div class="panel-heading">Cypher 에디터</div>
-        <textarea id="cypher-input" placeholder="MATCH (n) RETURN n" spellcheck="false"></textarea>
+        <textarea id="cypher-input" spellcheck="false" placeholder="MATCH (n) RETURN n"></textarea>
         <div class="editor-actions">
           <button id="reset-btn" class="ghost">초기화</button>
         </div>
-      </div>
+      </section>
 
-      <div class="panel result-panel">
+      <section class="panel results">
         <div class="panel-heading">실행 결과</div>
-        <div class="result-shell">
-          <table class="result-table">
-            <thead>
-              <tr><th>컬럼</th><th>예시 값</th></tr>
-            </thead>
-            <tbody id="result-body">
-              <tr><td>n</td><td>{ id: 1, label: "Person" }</td></tr>
-            </tbody>
-          </table>
+        <div class="result-shell" id="result-shell">
+          <div class="muted">아직 실행된 쿼리가 없습니다.</div>
         </div>
         <div id="feedback" class="feedback muted">정답 여부가 여기 표시됩니다.</div>
-      </div>
+      </section>
     </section>
   </main>
 
-  <script type="module" src="./src/app.js"></script>
+  <div id="overlay" class="overlay hidden">
+    <div class="overlay-card">
+      <h3>데이터가 없어 게임을 시작할 수 없습니다</h3>
+      <p class="muted">Seed를 먼저 실행하면 샘플 그래프가 생성되고 추천/유저/상품 퀘스트가 열립니다.</p>
+      <button id="overlay-seed-btn" class="primary full">데이터 초기화(Seed)</button>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>
