@@ -10,6 +10,9 @@ An interactive web-based codex to master graph-based recommender systems with Ne
 See the full game design, track map, and UX/stack blueprint in [`docs/game-design.md`](docs/game-design.md).
 
 ## Web game prototype
+A static, in-browser prototype that mirrors the intended 3-panel UX and result-based grading loop ships with `index.html` at the repo root (referencing assets in `web/`).
+
+1. Start a local server from the repo root: `python -m http.server 8000` (then open `http://localhost:8000/index.html`).
 A static, in-browser prototype that mirrors the intended 3-panel UX and result-based grading loop lives in `web/`:
 
 1. Start a local server: `python -m http.server 8000 -d web` (or open `web/index.html` directly).
