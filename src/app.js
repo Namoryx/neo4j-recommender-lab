@@ -2,7 +2,8 @@ import { quests } from './quests.js';
 import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
 
-const API_ENDPOINT = '/api/run';
+// Cloudflare Worker endpoint that executes Cypher.
+const WORKER_ENDPOINT = 'https://your-worker-subdomain.workers.dev/run';
 
 const questListEl = document.getElementById('quest-list');
 const titleEl = document.getElementById('quest-title');
@@ -147,14 +148,16 @@ async function runQuery(query) {
   isRunning = true;
 
   try {
-    const response = await fetch(API_ENDPOINT, {
+    const response = await fetch(WORKER_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query })
+      body: JSON.stringify({ cypher: query })
     });
 
     if (!response.ok) {
-      throw new Error('Cypher 실행 실패');
+      const errData = await response.json().catch(() => ({}));
+      const message = errData.error || 'Cypher 실행 실패';
+      throw new Error(message);
     }
 
     const data = await response.json();
@@ -170,7 +173,7 @@ async function runQuery(query) {
     return normalized;
   } catch (err) {
     console.error(err);
-    feedbackEl.textContent = '실행 실패: 서버에 연결할 수 없습니다.';
+    feedbackEl.textContent = `실행 실패: ${err.message || '서버에 연결할 수 없습니다.'}`;
     feedbackEl.className = 'feedback error';
     return null;
   } finally {
