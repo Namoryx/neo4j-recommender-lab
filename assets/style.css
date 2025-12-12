@@ -26,6 +26,21 @@ body {
   min-height: 100vh;
 }
 
+.env-banner {
+  margin: 0;
+  padding: 12px 16px;
+  text-align: center;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecdd3;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.env-banner.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecdd3;
+}
+
 .frame {
   width: min(1200px, 100% - 32px);
   margin: 0 auto;
