@@ -7,6 +7,7 @@ An interactive web-based codex to master graph-based recommender systems with Ne
 - **Core focus:** AI recommendations + GraphRAG fundamentals; domain DLCs (news/legal/10K/ETF) arrive later.
 - **Result-based grading:** never compare query strings; validate outputs, shapes, and tolerances.
 
+See the full game design, track map, and UX/stack blueprint in [`docs/game-design.md`](docs/game-design.md). A Korean version of the design narrative is available in [`docs/game-design-ko.md`](docs/game-design-ko.md).
 See the full game design, track map, and UX/stack blueprint in [`docs/game-design.md`](docs/game-design.md).
 
 ## Web game prototype
