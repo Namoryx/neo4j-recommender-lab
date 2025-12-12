@@ -3,7 +3,51 @@ import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
 
 // Cloudflare Worker endpoint that executes Cypher.
-const WORKER_ENDPOINT = 'https://your-worker-subdomain.workers.dev/run';
+const DEFAULT_WORKER_ENDPOINT = 'https://neo4j-cypher-runner.namoryx.workers.dev/run';
+
+function readRuntimeEnv(key) {
+  if (typeof window !== 'undefined' && window?.[key]) {
+    return window[key];
+  }
+
+  if (typeof import.meta !== 'undefined' && import.meta?.env?.[key]) {
+    return import.meta.env[key];
+  }
+
+  if (typeof process !== 'undefined' && process?.env?.[key]) {
+    return process.env[key];
+  }
+
+  return undefined;
+}
+
+function resolveWorkerEndpoint() {
+  const runtimeEndpoint = readRuntimeEnv('WORKER_ENDPOINT') || readRuntimeEnv('VITE_WORKER_ENDPOINT');
+  const endpoint = runtimeEndpoint || DEFAULT_WORKER_ENDPOINT;
+  const isPlaceholder = !endpoint || /your-worker-subdomain|example\.com/i.test(endpoint);
+
+  if (isPlaceholder) {
+    return { endpoint: null, reason: '실제 Cloudflare Worker URL을 설정하세요.' };
+  }
+
+  return { endpoint, reason: null };
+}
+
+function renderEndpointBanner(message) {
+  if (!message) return;
+
+  let banner = document.getElementById('endpoint-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'endpoint-banner';
+    banner.className = 'env-banner error';
+    document.body.prepend(banner);
+  }
+
+  banner.textContent = message;
+}
+
+const { endpoint: WORKER_ENDPOINT, reason: endpointError } = resolveWorkerEndpoint();
 
 const questListEl = document.getElementById('quest-list');
 const titleEl = document.getElementById('quest-title');
@@ -137,6 +181,12 @@ async function runQuery(query) {
     return null;
   }
 
+  if (!WORKER_ENDPOINT) {
+    feedbackEl.textContent = 'Worker URL이 설정되지 않았습니다. 환경 변수를 확인하세요.';
+    feedbackEl.className = 'feedback error';
+    return null;
+  }
+
   if (currentQuest?.denyWrite && /\b(create|merge|delete|set)\b/i.test(query)) {
     feedbackEl.textContent = '쓰기 연산은 허용되지 않습니다.';
     feedbackEl.className = 'feedback error';
@@ -245,6 +295,12 @@ function handleHint() {
 }
 
 function init() {
+  if (endpointError) {
+    renderEndpointBanner(endpointError);
+    feedbackEl.textContent = endpointError;
+    feedbackEl.className = 'feedback error';
+  }
+
   const startId = progress.currentQuestId || quests[0]?.id;
   if (startId) {
     selectQuest(startId);
