@@ -13,6 +13,10 @@ const textarea = document.getElementById('cypher-input');
 const feedbackEl = document.getElementById('feedback');
 const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
+const counterEl = document.getElementById('progress-counter');
+const textarea = document.getElementById('cypher-input');
+const feedbackEl = document.getElementById('feedback');
+const runBtn = document.getElementById('run-btn');
 const resetBtn = document.getElementById('reset-btn');
 
 let currentQuest = null;
