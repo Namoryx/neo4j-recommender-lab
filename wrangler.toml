@@ -1,0 +1,9 @@
+name = "neo4j-cypher-runner"
+main = "worker.js"
+compatibility_date = "2024-06-20"
+
+[vars]
+# Worker secrets are configured via `wrangler secret put`:
+# NEO4J_URI
+# NEO4J_USER
+# NEO4J_PASSWORD
