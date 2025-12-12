@@ -2,8 +2,10 @@ import { quests } from './quests.js';
 import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
 
+const API_BASE = 'https://neo4j-runner.neo4j-namoryx.workers.dev';
 // Cloudflare Worker endpoint that executes Cypher.
-const DEFAULT_WORKER_ENDPOINT = 'https://neo4j-cypher-runner.namoryx.workers.dev/run';
+const DEFAULT_WORKER_ENDPOINT = `${API_BASE}/run`;
+const SEEDED_FLAG_KEY = 'seeded';
 
 function readRuntimeEnv(key) {
   if (typeof window !== 'undefined' && window?.[key]) {
@@ -64,12 +66,14 @@ const submitBtn = document.getElementById('submit-btn');
 const resetBtn = document.getElementById('reset-btn');
 const hintBtn = document.getElementById('hint-btn');
 const hintSteps = document.getElementById('hint-steps');
+const seedBtn = document.getElementById('seed-btn');
 
 let progress = loadProgress();
 let currentQuest = null;
 let revealedHintCount = 0;
 let lastRunResult = null;
 let isRunning = false;
+let toastTimer = null;
 
 function computeScore() {
   const clearedCount = progress.clearedQuestIds.length;
@@ -172,6 +176,107 @@ function renderResultTable(result) {
     row.append(colCell, valueCell);
     resultBodyEl.appendChild(row);
   });
+}
+
+function isSeeded() {
+  try {
+    return localStorage.getItem(SEEDED_FLAG_KEY) === 'true';
+  } catch (err) {
+    console.warn('localStorage 접근 불가', err);
+    return false;
+  }
+}
+
+function setSeededFlag() {
+  try {
+    localStorage.setItem(SEEDED_FLAG_KEY, 'true');
+  } catch (err) {
+    console.warn('localStorage 저장 실패', err);
+  }
+}
+
+function showToast(message, type = 'info') {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = message;
+  toast.className = `toast ${type}`;
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+  }
+
+  requestAnimationFrame(() => {
+    toast.classList.add('visible');
+  });
+
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+  }, 3200);
+}
+
+function setSeedButtonState({ loading = false, seeded = false } = {}) {
+  if (!seedBtn) return;
+
+  seedBtn.disabled = loading || seeded;
+  seedBtn.classList.toggle('loading', loading);
+  seedBtn.classList.toggle('completed', seeded);
+
+  if (loading) {
+    seedBtn.textContent = '초기화 중...';
+    return;
+  }
+
+  if (seeded) {
+    seedBtn.textContent = '완료됨';
+    return;
+  }
+
+  seedBtn.textContent = '데이터 초기화(Seed)';
+}
+
+async function triggerSeed() {
+  if (!seedBtn) return;
+  if (isSeeded()) {
+    setSeedButtonState({ seeded: true });
+    showToast('이미 시드가 완료되었습니다.', 'success');
+    return;
+  }
+
+  setSeedButtonState({ loading: true });
+
+  try {
+    const response = await fetch(`${API_BASE}/seed`, { method: 'POST' });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      const message = errBody.error || '데이터 초기화에 실패했습니다.';
+      throw new Error(message);
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const message = data.message || '';
+    const alreadySeeded = /already\s*seeded/i.test(message) || data.alreadySeeded;
+
+    setSeededFlag();
+    setSeedButtonState({ seeded: true });
+
+    if (alreadySeeded) {
+      showToast('이미 초기화된 데이터입니다.', 'info');
+    } else {
+      showToast('데이터 시드가 완료되었습니다!', 'success');
+    }
+  } catch (err) {
+    console.error(err);
+    setSeedButtonState({ seeded: isSeeded() });
+    showToast(`초기화 실패: ${err.message || '알 수 없는 오류'}`, 'error');
+  }
 }
 
 async function runQuery(query) {
@@ -303,6 +408,8 @@ function init() {
     feedbackEl.className = 'feedback error';
   }
 
+  setSeedButtonState({ seeded: isSeeded() });
+
   const startId = progress.currentQuestId || quests[0]?.id;
   if (startId) {
     selectQuest(startId);
@@ -311,6 +418,7 @@ function init() {
   submitBtn?.addEventListener('click', handleSubmit);
   resetBtn.addEventListener('click', handleReset);
   hintBtn.addEventListener('click', handleHint);
+  seedBtn?.addEventListener('click', triggerSeed);
 }
 
 init();
