@@ -7,6 +7,78 @@
   <link rel="stylesheet" href="./assets/style.css">
 </head>
 <body>
+  <header class="topbar">
+    <div class="frame">
+      <div class="brand">
+        <span class="dot"></span>
+        <span class="title">Neo4j Cypher Quest</span>
+      </div>
+      <div class="top-meta">
+        <div class="pill" aria-live="polite">퀘스트 ID: <strong id="quest-id">-</strong></div>
+        <div class="pill score">점수: <strong id="score">0</strong></div>
+        <div class="top-actions">
+          <button id="run-btn" class="ghost">Run</button>
+          <button id="submit-btn" class="primary">Submit</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="frame workspace">
+    <aside class="left-panel panel">
+      <div class="quest-meta">
+        <p class="eyebrow">스토리</p>
+        <h2 id="quest-title">퀘스트 제목</h2>
+        <p id="quest-desc" class="muted">설명 및 서사가 여기에 표시됩니다.</p>
+      </div>
+
+      <div class="objective">
+        <div class="panel-heading">목표</div>
+        <p id="quest-objective">Cypher로 수행해야 할 목표가 요약됩니다.</p>
+      </div>
+
+      <div class="hint-block">
+        <div class="panel-heading">힌트</div>
+        <button id="hint-btn" class="full">힌트 보기</button>
+        <ol id="hint-steps" class="hint-steps">
+          <li>힌트를 단계적으로 노출하도록 설계하세요.</li>
+          <li>필요 시 Neo4j Docs를 참고하세요.</li>
+        </ol>
+      </div>
+
+      <div class="quest-list">
+        <div class="panel-heading">퀘스트 선택</div>
+        <ul id="quest-list"></ul>
+        <div class="progress" aria-label="progress">진행도: <span id="progress-counter">0 / 0</span></div>
+      </div>
+    </aside>
+
+    <section class="right-panel">
+      <div class="panel editor-panel">
+        <div class="panel-heading">Cypher 에디터</div>
+        <textarea id="cypher-input" placeholder="MATCH (n) RETURN n" spellcheck="false"></textarea>
+        <div class="editor-actions">
+          <button id="reset-btn" class="ghost">초기화</button>
+        </div>
+      </div>
+
+      <div class="panel result-panel">
+        <div class="panel-heading">실행 결과</div>
+        <div class="result-shell">
+          <table class="result-table">
+            <thead>
+              <tr><th>컬럼</th><th>예시 값</th></tr>
+            </thead>
+            <tbody id="result-body">
+              <tr><td>n</td><td>{ id: 1, label: "Person" }</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="feedback" class="feedback muted">정답 여부가 여기 표시됩니다.</div>
+      </div>
+    </section>
+  </main>
+
   <header class="hero">
     <div class="container">
       <h1>Neo4j Cypher Quest</h1>
