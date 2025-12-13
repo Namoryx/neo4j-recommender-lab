@@ -98,9 +98,22 @@ export async function apiFetch(url, options = {}, context = 'API 요청') {
 }
 
 export async function runHealthCheck() {
-  const { response, bodyText } = await apiFetch(`${API_BASE}/health`, {}, 'Health check');
-  const message = bodyText?.trim() || response.statusText || '응답 없음';
-  return { ok: response.ok, message };
+  try {
+    const { response, bodyText } = await apiFetch(`${API_BASE}/health`, {}, 'Health check');
+    const message = bodyText?.trim() || response.statusText || '응답 없음';
+    return { ok: response.ok, message };
+  } catch (err) {
+    // Fallback: some runner instances expose only /run; attempt RETURN 1
+    try {
+      const fallback = await runReturnOneTest();
+      return {
+        ok: fallback.ok,
+        message: fallback.ok ? 'RETURN 1 fallback 성공' : 'Health 및 fallback 실패',
+      };
+    } catch (innerErr) {
+      throw err || innerErr;
+    }
+  }
 }
 
 export async function runReturnOneTest() {
