@@ -1,4 +1,4 @@
-const API_BASE = 'https://neo4j-runner.neo4j-namoryx.workers.dev';
+import { API_BASE, RUN_URL, SEED_URL, SUBMIT_URL, HEALTH_URL } from '../src/config.js';
 
 function withTimeout(ms) {
   const controller = new AbortController();
@@ -9,7 +9,7 @@ function withTimeout(ms) {
 export async function runCypher(cypher, params = {}) {
   const { controller, clear } = withTimeout(10000);
   try {
-    const res = await fetch(`${API_BASE}/run`, {
+    const res = await fetch(RUN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cypher, params }),
@@ -30,7 +30,7 @@ export async function runCypher(cypher, params = {}) {
 export async function seedData() {
   const { controller, clear } = withTimeout(10000);
   try {
-    const res = await fetch(`${API_BASE}/seed`, { method: 'POST', signal: controller.signal });
+    const res = await fetch(SEED_URL, { method: 'POST', signal: controller.signal });
     const json = await res.json().catch(() => ({}));
     return json;
   } finally {
@@ -49,4 +49,4 @@ export async function checkSeeded() {
   }
 }
 
-export { API_BASE };
+export { API_BASE, RUN_URL, SEED_URL, SUBMIT_URL, HEALTH_URL };
