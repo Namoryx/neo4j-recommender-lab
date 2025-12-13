@@ -22,10 +22,12 @@ const els = {
   title: document.getElementById('quest-title'),
   desc: document.getElementById('quest-desc'),
   objective: document.getElementById('quest-objective'),
+  questMeta: document.getElementById('quest-meta'),
   hintBtn: document.getElementById('hint-btn'),
   hintSteps: document.getElementById('hint-steps'),
   questList: document.getElementById('quest-list'),
   progress: document.getElementById('progress-counter'),
+  progressDetail: document.getElementById('progress-detail'),
   textarea: document.getElementById('cypher-input'),
   resetBtn: document.getElementById('reset-btn'),
   runBtn: document.getElementById('run-btn'),
@@ -121,33 +123,58 @@ function updateButtons() {
 }
 
 function renderQuestList() {
-  const list = availableQuests(state.seeded);
+  const chapterMap = quests.reduce((acc, quest) => {
+    const key = quest.chapter ?? 0;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(quest);
+    return acc;
+  }, {});
+
   els.questList.innerHTML = '';
-  list.forEach((q) => {
-    const li = document.createElement('li');
-    const title = document.createElement('span');
-    title.textContent = `${q.id} · ${q.title}`;
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = q.group === 'pre' ? '사전 체크' : '시드 필요';
-    if (q.group === 'post' && !state.seeded) {
-      li.classList.add('locked');
-    }
-    if (q.id === state.currentQuestId) li.classList.add('active');
-    li.appendChild(title);
-    li.appendChild(badge);
-    li.addEventListener('click', () => {
-      if (q.group === 'post' && !state.seeded) {
-        toast('Seed 완료 후에 진행할 수 있습니다.', 'warning');
-        return;
+  const chapterKeys = Object.keys(chapterMap)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  chapterKeys.forEach((chapter) => {
+    const header = document.createElement('li');
+    header.className = 'quest-group';
+    const chapterName = chapter === 0 ? '프롤로그' : `CH${chapter}`;
+    const chapterTotal = chapterMap[chapter].length;
+    const chapterCleared = chapterMap[chapter].filter((q) => state.clearedIds.includes(q.id)).length;
+    header.textContent = `${chapterName} · ${chapterCleared}/${chapterTotal}`;
+    els.questList.appendChild(header);
+
+    chapterMap[chapter].forEach((q) => {
+      const li = document.createElement('li');
+      const title = document.createElement('span');
+      title.textContent = `${q.id} · ${q.title}`;
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = q.group === 'pre' ? '사전 체크' : `챕터 ${q.chapter}`;
+      const locked = q.group === 'post' && !state.seeded;
+      const cleared = state.clearedIds.includes(q.id);
+      if (locked) {
+        li.classList.add('locked');
       }
-      state.currentQuestId = q.id;
-      saveState(state);
-      loadQuest(q.id);
+      if (cleared) {
+        li.classList.add('cleared');
+      }
+      if (q.id === state.currentQuestId) li.classList.add('active');
+      li.appendChild(title);
+      li.appendChild(badge);
+      li.addEventListener('click', () => {
+        if (locked) {
+          toast('Seed 완료 후에 진행할 수 있습니다.', 'warning');
+          return;
+        }
+        state.currentQuestId = q.id;
+        saveState(state);
+        loadQuest(q.id);
+      });
+      els.questList.appendChild(li);
     });
-    els.questList.appendChild(li);
   });
-  els.progress.textContent = `${list.length} / ${quests.length}`;
+  renderProgressSummary();
 }
 
 function loadQuest(questId) {
@@ -162,6 +189,7 @@ function loadQuest(questId) {
   els.title.textContent = quest.title;
   els.desc.textContent = quest.story;
   els.objective.textContent = quest.objective;
+  renderQuestMeta(quest);
   els.hintSteps.innerHTML = '';
   els.feedback.textContent = '정답 여부가 여기 표시됩니다.';
   els.feedback.className = 'feedback muted';
@@ -229,7 +257,10 @@ async function handleSubmit() {
   const result = evaluate(quest, lastResult);
   setFeedback(result.feedback, result.correct);
   if (result.correct) {
-    state.score += 100;
+    if (!state.clearedIds.includes(quest.id)) {
+      state.score += 100;
+      state.clearedIds.push(quest.id);
+    }
     const nextId = nextQuestId(quest.id, state.seeded);
     state.currentQuestId = nextId;
     saveState(state);
@@ -313,6 +344,56 @@ function toggleLoading(on) {
 
 function updateScore() {
   els.score.textContent = state.score;
+}
+
+function renderQuestMeta(quest) {
+  if (!els.questMeta) return;
+  els.questMeta.innerHTML = '';
+
+  const chapter = document.createElement('li');
+  chapter.textContent = `챕터: ${quest.chapter === 0 ? '프롤로그' : `CH${quest.chapter}`}`;
+  els.questMeta.appendChild(chapter);
+
+  if (quest.constraints?.requireSeed) {
+    const li = document.createElement('li');
+    li.textContent = 'Seed 완료 후 진행 가능합니다.';
+    els.questMeta.appendChild(li);
+  }
+  if (quest.constraints?.denyWrite) {
+    const li = document.createElement('li');
+    li.textContent = '쓰기 연산 금지 (CREATE/MERGE/DELETE/SET)';
+    els.questMeta.appendChild(li);
+  }
+  if (quest.allowedOps?.length) {
+    const li = document.createElement('li');
+    li.textContent = `허용 키워드: ${quest.allowedOps.join(', ')}`;
+    els.questMeta.appendChild(li);
+  }
+}
+
+function renderProgressSummary() {
+  const total = quests.length;
+  const cleared = state.clearedIds.length;
+  els.progress.textContent = `${cleared} / ${total}`;
+
+  if (!els.progressDetail) return;
+  const chapterStats = quests.reduce((acc, quest) => {
+    const key = quest.chapter ?? 0;
+    if (!acc[key]) acc[key] = { total: 0, cleared: 0 };
+    acc[key].total += 1;
+    if (state.clearedIds.includes(quest.id)) acc[key].cleared += 1;
+    return acc;
+  }, {});
+  const summary = Object.keys(chapterStats)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((chapter) => {
+      const name = chapter === 0 ? '프롤로그' : `CH${chapter}`;
+      const { total: t, cleared: c } = chapterStats[chapter];
+      return `${name} ${c}/${t}`;
+    })
+    .join(' · ');
+  els.progressDetail.textContent = summary;
 }
 
 updateScore();
