@@ -121,6 +121,8 @@ export async function seedData() {
       return json;
     }
     primaryError = new Error(json.error || `Seed 실패 (HTTP ${response.status})`);
+  } catch (err) {
+    primaryError = err;
   } finally {
     clear();
   }

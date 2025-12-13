@@ -101,7 +101,15 @@ export async function runHealthCheck() {
   try {
     const { response, bodyText } = await apiFetch(`${API_BASE}/health`, {}, 'Health check');
     const message = bodyText?.trim() || response.statusText || '응답 없음';
-    return { ok: response.ok, message };
+    if (response.ok) {
+      return { ok: true, message };
+    }
+    // If /health is present but returns an error, still attempt the fallback.
+    const fallback = await runReturnOneTest();
+    return {
+      ok: fallback.ok,
+      message: fallback.ok ? 'RETURN 1 fallback 성공 (/health 오류)' : message,
+    };
   } catch (err) {
     // Fallback: some runner instances expose only /run; attempt RETURN 1
     try {
