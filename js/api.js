@@ -1,4 +1,5 @@
-const API_BASE = 'https://neo4j-runner.neo4j-namoryx.workers.dev';
+import { API_BASE } from './config.js';
+import { apiFetch } from './diagnostics.js';
 
 function withTimeout(ms) {
   const controller = new AbortController();
@@ -9,15 +10,24 @@ function withTimeout(ms) {
 export async function runCypher(cypher, params = {}) {
   const { controller, clear } = withTimeout(10000);
   try {
-    const res = await fetch(`${API_BASE}/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cypher, params }),
-      signal: controller.signal,
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json.error) {
-      throw new Error(json.error || '쿼리 실행 실패');
+    const { response, bodyText } = await apiFetch(
+      `${API_BASE}/run`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cypher, params }),
+        signal: controller.signal,
+      },
+      'Cypher 실행'
+    );
+    let json = {};
+    try {
+      json = JSON.parse(bodyText || '{}');
+    } catch (err) {
+      json = {};
+    }
+    if (!response.ok || json.error) {
+      throw new Error(json.error || `쿼리 실행 실패 (HTTP ${response.status})`);
     }
     const fields = json.fields || json.columns || [];
     const values = json.values || json.rows || [];
@@ -30,8 +40,17 @@ export async function runCypher(cypher, params = {}) {
 export async function seedData() {
   const { controller, clear } = withTimeout(10000);
   try {
-    const res = await fetch(`${API_BASE}/seed`, { method: 'POST', signal: controller.signal });
-    const json = await res.json().catch(() => ({}));
+    const { response, bodyText } = await apiFetch(
+      `${API_BASE}/seed`,
+      { method: 'POST', signal: controller.signal },
+      'Seed 실행'
+    );
+    let json = {};
+    try {
+      json = JSON.parse(bodyText || '{}');
+    } catch (err) {
+      json = {};
+    }
     return json;
   } finally {
     clear();
@@ -49,4 +68,3 @@ export async function checkSeeded() {
   }
 }
 
-export { API_BASE };
