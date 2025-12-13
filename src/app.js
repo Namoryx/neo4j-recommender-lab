@@ -1,8 +1,8 @@
 import { quests } from './quests.js';
 import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
+import { API_BASE } from './config.js';
 
-const API_BASE = 'https://neo4j-runner.neo4j-namoryx.workers.dev';
 // Cloudflare Worker endpoint that executes Cypher.
 const DEFAULT_WORKER_ENDPOINT = `${API_BASE}/run`;
 const SEEDED_FLAG_KEY = 'seeded';

@@ -1,8 +1,7 @@
-import { API_BASE, checkSeeded, seedData } from './api.js';
-import { showOverlaySeedRequired, toast, setFeedback } from './render.js';
+import { API_BASE, checkSeeded, seedData, submitCypher } from './api.js';
+import { renderTable, showOverlaySeedRequired, toast, setFeedback } from './render.js';
 import {
   availableQuests,
-  evaluate,
   getQuestById,
   loadState,
   nextQuestId,
@@ -14,6 +13,7 @@ import {
 let state = loadState();
 let lastResult = null;
 let hintIndex = 0;
+let lastEvaluation = null;
 
 const els = {
   questId: document.getElementById('quest-id'),
@@ -140,6 +140,7 @@ function loadQuest(questId) {
     els.textarea.value = quest.starterCypher;
   }
   lastResult = null;
+  lastEvaluation = null;
   updateButtons();
   toggleOverlay(!state.seeded);
 }
@@ -185,23 +186,38 @@ async function handleSubmit() {
     toggleOverlay(true);
     return;
   }
-  if (!lastResult) {
-    toast('먼저 Run을 실행하세요.', 'info');
+  const cypher = els.textarea?.value?.trim();
+  if (!cypher) {
+    toast('Cypher를 입력하세요.', 'error');
     return;
   }
-  const result = evaluate(quest, lastResult);
-  setFeedback(result.feedback, result.correct);
-  if (result.correct) {
-    state.score += 100;
-    const nextId = nextQuestId(quest.id, state.seeded);
-    state.currentQuestId = nextId;
-    saveState(state);
-    renderQuestList();
-    loadQuest(nextId);
-  } else {
-    saveState(state);
+  toggleLoading(true);
+  try {
+    const response = await submitCypher(quest.id, cypher);
+    const { columns, rows, evaluation } = response;
+    lastResult = { fields: columns || [], values: rows || [] };
+    lastEvaluation = evaluation || null;
+    renderTable({ fields: lastResult.fields, values: lastResult.values }, els.resultShell);
+    setFeedback(evaluation?.feedback || '채점 결과를 받아오지 못했습니다.', evaluation?.correct ?? null);
+
+    if (evaluation?.correct) {
+      state.score += 100;
+      const nextId = nextQuestId(quest.id, state.seeded);
+      state.currentQuestId = nextId;
+      saveState(state);
+      renderQuestList();
+      loadQuest(nextId);
+    } else {
+      saveState(state);
+    }
+    updateScore();
+  } catch (err) {
+    console.error(err);
+    setFeedback(err.message || '제출 중 오류가 발생했습니다.', false);
+    toast(err.message || '제출 실패', 'error');
+  } finally {
+    toggleLoading(false);
   }
-  updateScore();
 }
 
 async function handleSeed() {
