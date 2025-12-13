@@ -1,6 +1,6 @@
 import { checkSeeded, seedData } from './api.js';
-import { HEALTH_URL } from '../src/config.js';
 import { showOverlaySeedRequired, toast, setFeedback } from './render.js';
+import { initDiagnostics, logDiagnostic, runHealthCheck, runReturnOneTest } from './diagnostics.js';
 import {
   availableQuests,
   evaluate,
@@ -37,24 +37,40 @@ const els = {
   feedback: document.getElementById('feedback'),
   resultShell: document.getElementById('result-shell'),
   health: document.getElementById('health-indicator'),
+  diagHealthBtn: document.getElementById('diag-health-btn'),
+  diagReturnBtn: document.getElementById('diag-return-btn'),
+  diagSeedBtn: document.getElementById('diag-seed-btn'),
 };
 
+let healthOk = true;
+
 async function init() {
+  initDiagnostics();
   bindEvents();
   renderQuestList();
-  await refreshHealth();
+  await refreshHealth(true);
   await enforceSeeding();
   loadQuest(state.currentQuestId);
 }
 
-async function refreshHealth() {
+async function refreshHealth(auto = false) {
   if (!els.health) return;
   try {
-    const res = await fetch(HEALTH_URL);
-    const text = await res.text();
-    els.health.textContent = res.ok ? `Worker OK (${text})` : 'Worker 불안정';
+    const { ok, message } = await runHealthCheck();
+    healthOk = ok;
+    els.health.textContent = ok ? `Worker OK (${message})` : `Worker 불안정: ${message}`;
+    if (!ok) {
+      disableGameplayForHealth();
+      if (!auto) {
+        toast('Health check 실패. Diagnostics 패널을 확인하세요.', 'error');
+      }
+    } else {
+      updateButtons();
+    }
   } catch (err) {
     els.health.textContent = 'Worker 연결 실패';
+    healthOk = false;
+    disableGameplayForHealth();
   }
 }
 
@@ -65,6 +81,15 @@ function bindEvents() {
   els.submitBtn?.addEventListener('click', () => handleSubmit());
   els.seedBtn?.addEventListener('click', () => handleSeed());
   els.overlaySeedBtn?.addEventListener('click', () => handleSeed());
+  els.diagHealthBtn?.addEventListener('click', () => refreshHealth());
+  els.diagReturnBtn?.addEventListener('click', () => handleReturnOneTest());
+  els.diagSeedBtn?.addEventListener('click', () => handleSeed(true));
+}
+
+function disableGameplayForHealth() {
+  if (els.runBtn) els.runBtn.disabled = true;
+  if (els.submitBtn) els.submitBtn.disabled = true;
+  setFeedback('Health check 실패. Diagnostics 패널에서 상세 로그를 확인하세요.', false);
 }
 
 async function enforceSeeding() {
@@ -84,13 +109,16 @@ function toggleOverlay(show) {
 
 function updateButtons() {
   const current = getQuestById(state.currentQuestId);
-  const locked = current.group === 'post' && !state.seeded;
+  const locked = (current.group === 'post' && !state.seeded) || !healthOk;
   els.runBtn.disabled = locked;
   els.submitBtn.disabled = locked;
   els.seedBtn.textContent = state.seeded ? 'Seed 완료' : '데이터 초기화(Seed)';
   els.seedBtn.disabled = state.seeded;
   if (locked) {
-    setFeedback('데이터를 Seed한 후에 진행하세요.', false);
+    const msg = !healthOk
+      ? 'Health check를 통과한 후 다시 시도하세요. Diagnostics 패널을 확인하세요.'
+      : '데이터를 Seed한 후에 진행하세요.';
+    setFeedback(msg, false);
   }
 }
 
@@ -192,6 +220,10 @@ function resetEditor() {
 
 async function handleRun() {
   const quest = getQuestById(state.currentQuestId);
+  if (!healthOk) {
+    toast('Health check가 실패했습니다. Diagnostics를 먼저 확인하세요.', 'warning');
+    return;
+  }
   if (quest.group === 'post' && !state.seeded) {
     toast('Seed 먼저 실행하세요.', 'warning');
     toggleOverlay(true);
@@ -209,6 +241,10 @@ async function handleRun() {
 
 async function handleSubmit() {
   const quest = getQuestById(state.currentQuestId);
+  if (!healthOk) {
+    toast('Health check를 통과한 후 제출 가능합니다.', 'warning');
+    return;
+  }
   if (quest.group === 'post' && !state.seeded) {
     toast('Seed 완료 후 제출 가능합니다.', 'warning');
     toggleOverlay(true);
@@ -236,7 +272,7 @@ async function handleSubmit() {
   updateScore();
 }
 
-async function handleSeed() {
+async function handleSeed(fromDiagnostics = false) {
   toggleSeedButtons(true);
   try {
     toast('Seed 실행 중...', 'info');
@@ -267,8 +303,22 @@ async function handleSeed() {
     }
   } catch (err) {
     toast(err.message || 'Seed 중 오류 발생', 'error');
+    logDiagnostic('Seed 오류', err.message || '알 수 없는 오류');
   } finally {
     toggleSeedButtons(false);
+    if (fromDiagnostics) {
+      logDiagnostic('Seed 실행 완료', state.seeded ? 'Seeded 상태' : 'Seeded 아님');
+    }
+  }
+}
+
+async function handleReturnOneTest() {
+  try {
+    const result = await runReturnOneTest();
+    toast(result.ok ? 'RETURN 1 응답 확인' : 'RETURN 1 실패', result.ok ? 'success' : 'error');
+    logDiagnostic('RETURN 1 테스트', result.body || '응답 본문 없음');
+  } catch (err) {
+    logDiagnostic('RETURN 1 오류', err.message || '실패');
   }
 }
 
@@ -285,8 +335,9 @@ function toggleSeedButtons(disabled) {
 }
 
 function toggleLoading(on) {
-  els.runBtn.disabled = on || (getQuestById(state.currentQuestId).group === 'post' && !state.seeded);
-  els.submitBtn.disabled = on || (getQuestById(state.currentQuestId).group === 'post' && !state.seeded);
+  const locked = (getQuestById(state.currentQuestId).group === 'post' && !state.seeded) || !healthOk;
+  els.runBtn.disabled = on || locked;
+  els.submitBtn.disabled = on || locked;
   els.runBtn.textContent = on ? 'Running...' : 'Run';
   els.submitBtn.textContent = on ? 'Submitting...' : 'Submit';
 }
