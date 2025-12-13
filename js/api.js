@@ -1,5 +1,6 @@
-import { API_BASE } from './config.js';
-import { apiFetch } from './diagnostics.js';
+import { API_BASE, getEndpoints } from '../src/config.js';
+
+const ENDPOINT_MAP = getEndpoints();
 
 const SEED_CYPHER = `
 UNWIND [
@@ -75,24 +76,15 @@ function withTimeout(ms) {
 export async function runCypher(cypher, params = {}) {
   const { controller, clear } = withTimeout(10000);
   try {
-    const { response, bodyText } = await apiFetch(
-      `${API_BASE}/run`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cypher, params }),
-        signal: controller.signal,
-      },
-      'Cypher 실행'
-    );
-    let json = {};
-    try {
-      json = JSON.parse(bodyText || '{}');
-    } catch (err) {
-      json = {};
-    }
-    if (!response.ok || json.error) {
-      throw new Error(json.error || `쿼리 실행 실패 (HTTP ${response.status})`);
+    const res = await fetch(ENDPOINT_MAP.run, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cypher, params }),
+      signal: controller.signal,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) {
+      throw new Error(json.error || '쿼리 실행 실패');
     }
     const fields = json.fields || json.columns || [];
     const values = json.values || json.rows || [];
@@ -106,16 +98,26 @@ export async function seedData() {
   const { controller, clear } = withTimeout(10000);
   let primaryError = null;
   try {
-    const { response, bodyText } = await apiFetch(
-      `${API_BASE}/seed`,
-      { method: 'POST', signal: controller.signal },
-      'Seed 실행'
-    );
-    let json = {};
-    try {
-      json = JSON.parse(bodyText || '{}');
-    } catch (err) {
-      json = {};
+    const res = await fetch(ENDPOINT_MAP.seed, { method: 'POST', signal: controller.signal });
+    const json = await res.json().catch(() => ({}));
+    return json;
+  } finally {
+    clear();
+  }
+}
+
+export async function submitCypher(questId, cypher, params = {}) {
+  const { controller, clear } = withTimeout(10000);
+  try {
+    const res = await fetch(ENDPOINT_MAP.submit, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questId, cypher, params }),
+      signal: controller.signal,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || '제출 실패');
     }
     if (response.ok) {
       return json;
@@ -147,3 +149,4 @@ export async function checkSeeded() {
   }
 }
 
+export { API_BASE, ENDPOINT_MAP as ENDPOINTS };

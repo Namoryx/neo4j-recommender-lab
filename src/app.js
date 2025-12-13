@@ -2,6 +2,7 @@ import { API_BASE, RUN_URL, SEED_URL, SUBMIT_URL } from './config.js';
 import { quests } from './quests.js';
 import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
+import { API_BASE } from './config.js';
 
 // Cloudflare Worker endpoint that executes Cypher.
 const DEFAULT_WORKER_ENDPOINT = RUN_URL;
