@@ -21,10 +21,12 @@ const els = {
   title: document.getElementById('quest-title'),
   desc: document.getElementById('quest-desc'),
   objective: document.getElementById('quest-objective'),
+  questMeta: document.getElementById('quest-meta'),
   hintBtn: document.getElementById('hint-btn'),
   hintSteps: document.getElementById('hint-steps'),
   questList: document.getElementById('quest-list'),
   progress: document.getElementById('progress-counter'),
+  progressDetail: document.getElementById('progress-detail'),
   textarea: document.getElementById('cypher-input'),
   resetBtn: document.getElementById('reset-btn'),
   runBtn: document.getElementById('run-btn'),
@@ -34,24 +36,40 @@ const els = {
   feedback: document.getElementById('feedback'),
   resultShell: document.getElementById('result-shell'),
   health: document.getElementById('health-indicator'),
+  diagHealthBtn: document.getElementById('diag-health-btn'),
+  diagReturnBtn: document.getElementById('diag-return-btn'),
+  diagSeedBtn: document.getElementById('diag-seed-btn'),
 };
 
+let healthOk = true;
+
 async function init() {
+  initDiagnostics();
   bindEvents();
   renderQuestList();
-  await refreshHealth();
+  await refreshHealth(true);
   await enforceSeeding();
   loadQuest(state.currentQuestId);
 }
 
-async function refreshHealth() {
+async function refreshHealth(auto = false) {
   if (!els.health) return;
   try {
-    const res = await fetch(`${API_BASE}/health`);
-    const text = await res.text();
-    els.health.textContent = res.ok ? `Worker OK (${text})` : 'Worker 불안정';
+    const { ok, message } = await runHealthCheck();
+    healthOk = ok;
+    els.health.textContent = ok ? `Worker OK (${message})` : `Worker 불안정: ${message}`;
+    if (!ok) {
+      disableGameplayForHealth();
+      if (!auto) {
+        toast('Health check 실패. Diagnostics 패널을 확인하세요.', 'error');
+      }
+    } else {
+      updateButtons();
+    }
   } catch (err) {
     els.health.textContent = 'Worker 연결 실패';
+    healthOk = false;
+    disableGameplayForHealth();
   }
 }
 
@@ -62,6 +80,15 @@ function bindEvents() {
   els.submitBtn?.addEventListener('click', () => handleSubmit());
   els.seedBtn?.addEventListener('click', () => handleSeed());
   els.overlaySeedBtn?.addEventListener('click', () => handleSeed());
+  els.diagHealthBtn?.addEventListener('click', () => refreshHealth());
+  els.diagReturnBtn?.addEventListener('click', () => handleReturnOneTest());
+  els.diagSeedBtn?.addEventListener('click', () => handleSeed(true));
+}
+
+function disableGameplayForHealth() {
+  if (els.runBtn) els.runBtn.disabled = true;
+  if (els.submitBtn) els.submitBtn.disabled = true;
+  setFeedback('Health check 실패. Diagnostics 패널에서 상세 로그를 확인하세요.', false);
 }
 
 async function enforceSeeding() {
@@ -81,44 +108,72 @@ function toggleOverlay(show) {
 
 function updateButtons() {
   const current = getQuestById(state.currentQuestId);
-  const locked = current.group === 'post' && !state.seeded;
+  const locked = (current.group === 'post' && !state.seeded) || !healthOk;
   els.runBtn.disabled = locked;
   els.submitBtn.disabled = locked;
   els.seedBtn.textContent = state.seeded ? 'Seed 완료' : '데이터 초기화(Seed)';
   els.seedBtn.disabled = state.seeded;
   if (locked) {
-    setFeedback('데이터를 Seed한 후에 진행하세요.', false);
+    const msg = !healthOk
+      ? 'Health check를 통과한 후 다시 시도하세요. Diagnostics 패널을 확인하세요.'
+      : '데이터를 Seed한 후에 진행하세요.';
+    setFeedback(msg, false);
   }
 }
 
 function renderQuestList() {
-  const list = availableQuests(state.seeded);
+  const chapterMap = quests.reduce((acc, quest) => {
+    const key = quest.chapter ?? 0;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(quest);
+    return acc;
+  }, {});
+
   els.questList.innerHTML = '';
-  list.forEach((q) => {
-    const li = document.createElement('li');
-    const title = document.createElement('span');
-    title.textContent = `${q.id} · ${q.title}`;
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = q.group === 'pre' ? '사전 체크' : '시드 필요';
-    if (q.group === 'post' && !state.seeded) {
-      li.classList.add('locked');
-    }
-    if (q.id === state.currentQuestId) li.classList.add('active');
-    li.appendChild(title);
-    li.appendChild(badge);
-    li.addEventListener('click', () => {
-      if (q.group === 'post' && !state.seeded) {
-        toast('Seed 완료 후에 진행할 수 있습니다.', 'warning');
-        return;
+  const chapterKeys = Object.keys(chapterMap)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  chapterKeys.forEach((chapter) => {
+    const header = document.createElement('li');
+    header.className = 'quest-group';
+    const chapterName = chapter === 0 ? '프롤로그' : `CH${chapter}`;
+    const chapterTotal = chapterMap[chapter].length;
+    const chapterCleared = chapterMap[chapter].filter((q) => state.clearedIds.includes(q.id)).length;
+    header.textContent = `${chapterName} · ${chapterCleared}/${chapterTotal}`;
+    els.questList.appendChild(header);
+
+    chapterMap[chapter].forEach((q) => {
+      const li = document.createElement('li');
+      const title = document.createElement('span');
+      title.textContent = `${q.id} · ${q.title}`;
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = q.group === 'pre' ? '사전 체크' : `챕터 ${q.chapter}`;
+      const locked = q.group === 'post' && !state.seeded;
+      const cleared = state.clearedIds.includes(q.id);
+      if (locked) {
+        li.classList.add('locked');
       }
-      state.currentQuestId = q.id;
-      saveState(state);
-      loadQuest(q.id);
+      if (cleared) {
+        li.classList.add('cleared');
+      }
+      if (q.id === state.currentQuestId) li.classList.add('active');
+      li.appendChild(title);
+      li.appendChild(badge);
+      li.addEventListener('click', () => {
+        if (locked) {
+          toast('Seed 완료 후에 진행할 수 있습니다.', 'warning');
+          return;
+        }
+        state.currentQuestId = q.id;
+        saveState(state);
+        loadQuest(q.id);
+      });
+      els.questList.appendChild(li);
     });
-    els.questList.appendChild(li);
   });
-  els.progress.textContent = `${list.length} / ${quests.length}`;
+  renderProgressSummary();
 }
 
 function loadQuest(questId) {
@@ -133,6 +188,7 @@ function loadQuest(questId) {
   els.title.textContent = quest.title;
   els.desc.textContent = quest.story;
   els.objective.textContent = quest.objective;
+  renderQuestMeta(quest);
   els.hintSteps.innerHTML = '';
   els.feedback.textContent = '정답 여부가 여기 표시됩니다.';
   els.feedback.className = 'feedback muted';
@@ -164,6 +220,10 @@ function resetEditor() {
 
 async function handleRun() {
   const quest = getQuestById(state.currentQuestId);
+  if (!healthOk) {
+    toast('Health check가 실패했습니다. Diagnostics를 먼저 확인하세요.', 'warning');
+    return;
+  }
   if (quest.group === 'post' && !state.seeded) {
     toast('Seed 먼저 실행하세요.', 'warning');
     toggleOverlay(true);
@@ -181,6 +241,10 @@ async function handleRun() {
 
 async function handleSubmit() {
   const quest = getQuestById(state.currentQuestId);
+  if (!healthOk) {
+    toast('Health check를 통과한 후 제출 가능합니다.', 'warning');
+    return;
+  }
   if (quest.group === 'post' && !state.seeded) {
     toast('Seed 완료 후 제출 가능합니다.', 'warning');
     toggleOverlay(true);
@@ -220,7 +284,7 @@ async function handleSubmit() {
   }
 }
 
-async function handleSeed() {
+async function handleSeed(fromDiagnostics = false) {
   toggleSeedButtons(true);
   try {
     toast('Seed 실행 중...', 'info');
@@ -251,8 +315,22 @@ async function handleSeed() {
     }
   } catch (err) {
     toast(err.message || 'Seed 중 오류 발생', 'error');
+    logDiagnostic('Seed 오류', err.message || '알 수 없는 오류');
   } finally {
     toggleSeedButtons(false);
+    if (fromDiagnostics) {
+      logDiagnostic('Seed 실행 완료', state.seeded ? 'Seeded 상태' : 'Seeded 아님');
+    }
+  }
+}
+
+async function handleReturnOneTest() {
+  try {
+    const result = await runReturnOneTest();
+    toast(result.ok ? 'RETURN 1 응답 확인' : 'RETURN 1 실패', result.ok ? 'success' : 'error');
+    logDiagnostic('RETURN 1 테스트', result.body || '응답 본문 없음');
+  } catch (err) {
+    logDiagnostic('RETURN 1 오류', err.message || '실패');
   }
 }
 
@@ -269,14 +347,65 @@ function toggleSeedButtons(disabled) {
 }
 
 function toggleLoading(on) {
-  els.runBtn.disabled = on || (getQuestById(state.currentQuestId).group === 'post' && !state.seeded);
-  els.submitBtn.disabled = on || (getQuestById(state.currentQuestId).group === 'post' && !state.seeded);
+  const locked = (getQuestById(state.currentQuestId).group === 'post' && !state.seeded) || !healthOk;
+  els.runBtn.disabled = on || locked;
+  els.submitBtn.disabled = on || locked;
   els.runBtn.textContent = on ? 'Running...' : 'Run';
   els.submitBtn.textContent = on ? 'Submitting...' : 'Submit';
 }
 
 function updateScore() {
   els.score.textContent = state.score;
+}
+
+function renderQuestMeta(quest) {
+  if (!els.questMeta) return;
+  els.questMeta.innerHTML = '';
+
+  const chapter = document.createElement('li');
+  chapter.textContent = `챕터: ${quest.chapter === 0 ? '프롤로그' : `CH${quest.chapter}`}`;
+  els.questMeta.appendChild(chapter);
+
+  if (quest.constraints?.requireSeed) {
+    const li = document.createElement('li');
+    li.textContent = 'Seed 완료 후 진행 가능합니다.';
+    els.questMeta.appendChild(li);
+  }
+  if (quest.constraints?.denyWrite) {
+    const li = document.createElement('li');
+    li.textContent = '쓰기 연산 금지 (CREATE/MERGE/DELETE/SET)';
+    els.questMeta.appendChild(li);
+  }
+  if (quest.allowedOps?.length) {
+    const li = document.createElement('li');
+    li.textContent = `허용 키워드: ${quest.allowedOps.join(', ')}`;
+    els.questMeta.appendChild(li);
+  }
+}
+
+function renderProgressSummary() {
+  const total = quests.length;
+  const cleared = state.clearedIds.length;
+  els.progress.textContent = `${cleared} / ${total}`;
+
+  if (!els.progressDetail) return;
+  const chapterStats = quests.reduce((acc, quest) => {
+    const key = quest.chapter ?? 0;
+    if (!acc[key]) acc[key] = { total: 0, cleared: 0 };
+    acc[key].total += 1;
+    if (state.clearedIds.includes(quest.id)) acc[key].cleared += 1;
+    return acc;
+  }, {});
+  const summary = Object.keys(chapterStats)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((chapter) => {
+      const name = chapter === 0 ? '프롤로그' : `CH${chapter}`;
+      const { total: t, cleared: c } = chapterStats[chapter];
+      return `${name} ${c}/${t}`;
+    })
+    .join(' · ');
+  els.progressDetail.textContent = summary;
 }
 
 updateScore();

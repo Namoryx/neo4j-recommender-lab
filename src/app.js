@@ -1,10 +1,12 @@
+import { API_BASE, RUN_URL, SEED_URL, SUBMIT_URL } from './config.js';
 import { quests } from './quests.js';
 import { checkResult } from './checker.js';
 import { loadProgress, saveProgress, markCleared } from './storage.js';
 import { API_BASE } from './config.js';
 
 // Cloudflare Worker endpoint that executes Cypher.
-const DEFAULT_WORKER_ENDPOINT = `${API_BASE}/run`;
+const DEFAULT_WORKER_ENDPOINT = RUN_URL;
+const DEFAULT_SUBMIT_ENDPOINT = SUBMIT_URL;
 const SEEDED_FLAG_KEY = 'seeded';
 
 function readRuntimeEnv(key) {
@@ -253,7 +255,7 @@ async function triggerSeed() {
   setSeedButtonState({ loading: true });
 
   try {
-    const response = await fetch(`${API_BASE}/seed`, { method: 'POST' });
+    const response = await fetch(SEED_URL, { method: 'POST' });
     if (!response.ok) {
       const errBody = await response.json().catch(() => ({}));
       const message = errBody.error || '데이터 초기화에 실패했습니다.';

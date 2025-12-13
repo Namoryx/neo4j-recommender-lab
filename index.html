@@ -21,6 +21,8 @@
     </div>
   </header>
 
+  <div id="banner-container"></div>
+
   <main class="layout">
     <aside class="left">
       <section class="panel">
@@ -32,6 +34,7 @@
       <section class="panel">
         <div class="panel-heading">목표</div>
         <p id="quest-objective" class="muted">Cypher로 달성해야 할 목표를 확인하세요.</p>
+        <ul id="quest-meta" class="quest-meta"></ul>
       </section>
 
       <section class="panel">
@@ -44,6 +47,7 @@
         <div class="panel-heading">퀘스트 목록</div>
         <ul id="quest-list" class="quest-list"></ul>
         <div class="progress">진행도: <span id="progress-counter">0 / 0</span></div>
+        <div id="progress-detail" class="muted small"></div>
       </section>
     </aside>
 
@@ -62,6 +66,17 @@
           <div class="muted">아직 실행된 쿼리가 없습니다.</div>
         </div>
         <div id="feedback" class="feedback muted">정답 여부가 여기 표시됩니다.</div>
+      </section>
+
+      <section class="panel diagnostics" id="diagnostics-panel">
+        <div class="panel-heading">진단 도구</div>
+        <p class="muted">Worker 연결 문제를 점검하고, Health/RETURN 1/Seed 버튼으로 상태를 확인하세요.</p>
+        <div class="diag-actions">
+          <button id="diag-health-btn" class="ghost">Health check</button>
+          <button id="diag-return-btn" class="ghost">RETURN 1 테스트</button>
+          <button id="diag-seed-btn" class="ghost">Seed 실행</button>
+        </div>
+        <div id="diagnostics-log" class="diagnostics-log" aria-live="polite" aria-label="Diagnostics result log"></div>
       </section>
     </section>
   </main>
