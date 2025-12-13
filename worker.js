@@ -5,68 +5,12 @@ const corsHeaders = {
 };
 
 const SEED_CYPHER = `
-UNWIND [
-  {id:"U1", name:"Alice"},
-  {id:"U2", name:"Bob"},
-  {id:"U3", name:"Chloe"},
-  {id:"U4", name:"Dan"},
-  {id:"U5", name:"Evan"}
-] AS u
-MERGE (x:User {id:u.id}) SET x.name = u.name;
-
-UNWIND [
-  {id:"P1", name:"Whisky A", category:"Whisky"},
-  {id:"P2", name:"Whisky B", category:"Whisky"},
-  {id:"P3", name:"Whisky C", category:"Whisky"},
-  {id:"P4", name:"Coffee Beans", category:"Coffee"},
-  {id:"P5", name:"Dripper", category:"Coffee"},
-  {id:"P6", name:"Mug", category:"Coffee"},
-  {id:"P7", name:"Protein Bar", category:"Fitness"},
-  {id:"P8", name:"Yoga Mat", category:"Fitness"}
-] AS p
-MERGE (y:Product {id:p.id})
-SET y.name = p.name, y.category = p.category;
-
-UNWIND [
-  {u:"U1", p:"P1", t:"VIEWED"},
-  {u:"U1", p:"P2", t:"VIEWED"},
-  {u:"U1", p:"P1", t:"ADDED_TO_CART"},
-  {u:"U1", p:"P1", t:"PURCHASED"},
-
-  {u:"U2", p:"P1", t:"VIEWED"},
-  {u:"U2", p:"P3", t:"VIEWED"},
-  {u:"U2", p:"P3", t:"ADDED_TO_CART"},
-  {u:"U2", p:"P3", t:"PURCHASED"},
-
-  {u:"U3", p:"P4", t:"VIEWED"},
-  {u:"U3", p:"P5", t:"VIEWED"},
-  {u:"U3", p:"P4", t:"PURCHASED"},
-  {u:"U3", p:"P5", t:"ADDED_TO_CART"},
-
-  {u:"U4", p:"P4", t:"VIEWED"},
-  {u:"U4", p:"P6", t:"VIEWED"},
-  {u:"U4", p:"P6", t:"PURCHASED"},
-
-  {u:"U5", p:"P7", t:"VIEWED"},
-  {u:"U5", p:"P8", t:"ADDED_TO_CART"},
-  {u:"U5", p:"P8", t:"PURCHASED"}
-] AS e
-MATCH (u:User {id:e.u}), (p:Product {id:e.p})
-FOREACH (_ IN CASE WHEN e.t="VIEWED" THEN [1] ELSE [] END |
-  MERGE (u)-[r:VIEWED]->(p)
-  ON CREATE SET r.count=1
-  ON MATCH SET r.count=r.count+1
-)
-FOREACH (_ IN CASE WHEN e.t="ADDED_TO_CART" THEN [1] ELSE [] END |
-  MERGE (u)-[r:ADDED_TO_CART]->(p)
-  ON CREATE SET r.count=1
-  ON MATCH SET r.count=r.count+1
-)
-FOREACH (_ IN CASE WHEN e.t="PURCHASED" THEN [1] ELSE [] END |
-  MERGE (u)-[r:PURCHASED]->(p)
-  ON CREATE SET r.count=1
-  ON MATCH SET r.count=r.count+1
-);
+  CREATE (u1:User {id: 'u1', name: 'Alice'})
+  CREATE (u2:User {id: 'u2', name: 'Bob'})
+  CREATE (i1:Item {id: 'i1', name: 'Graph DB Book'})
+  CREATE (i2:Item {id: 'i2', name: 'Neo4j Mug'})
+  CREATE (u1)-[:VIEW]->(i1)
+  CREATE (u2)-[:VIEW]->(i1)
 `;
 
 function errorResponse(message, status = 400) {
@@ -97,43 +41,58 @@ function validateQuery(raw) {
   return { ok: true, query: finalQuery };
 }
 
-async function executeCypher(query, env, signal) {
-  const endpoint = `${env.NEO4J_URI.replace(/\/?$/, '')}/db/neo4j/tx/commit`;
-  const payload = {
-    statements: [
-      {
-        statement: query,
-        resultDataContents: ['row'],
-        includeStats: false,
+async function runNeo4j(cypher, params, env, req) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const endpoint = `${env.NEO4J_URI.replace(/\/?$/, '')}/db/neo4j/tx/commit`;
+    const payload = {
+      statements: [
+        {
+          statement: cypher,
+          parameters: params,
+          resultDataContents: ['row'],
+          includeStats: false,
+        },
+      ],
+    };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`)}`,
       },
-    ],
-  };
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Basic ${btoa(`${env.NEO4J_USER}:${env.NEO4J_PASSWORD}`)}`,
-    },
-    body: JSON.stringify(payload),
-    signal,
-  });
+    if (!res.ok) {
+      throw new Error(`Neo4j HTTP error: ${res.status}`);
+    }
 
-  if (!res.ok) {
-    throw new Error(`Neo4j HTTP error: ${res.status}`);
+    const body = await res.json();
+    if (body.errors?.length) {
+      const first = body.errors[0];
+      throw new Error(first.message || 'Neo4j 쿼리 오류');
+    }
+
+    const result = body.results?.[0];
+    const fields = result?.columns || [];
+    const values = (result?.data || []).map((item) => item.row);
+
+    return new Response(JSON.stringify({ ok: true, fields, values }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  } catch (err) {
+    const status = err.name === 'AbortError' ? 504 : 400;
+    const message = err.name === 'AbortError' ? '쿼리 실행이 시간 초과되었습니다.' : err.message;
+    return errorResponse(message, status);
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const body = await res.json();
-  if (body.errors?.length) {
-    const first = body.errors[0];
-    throw new Error(first.message || 'Neo4j 쿼리 오류');
-  }
-
-  const result = body.results?.[0];
-  return {
-    fields: result?.columns || [],
-    values: (result?.data || []).map((item) => item.row),
-  };
 }
 
 async function handleRun(request, env) {
@@ -154,49 +113,11 @@ async function handleRun(request, env) {
     return errorResponse(validation.reason, 400);
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const result = await executeCypher(validation.query, env, controller.signal);
-    return new Response(JSON.stringify({ ok: true, ...result }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  } catch (err) {
-    const status = err.name === 'AbortError' ? 504 : 400;
-    const message = err.name === 'AbortError' ? '쿼리 실행이 시간 초과되었습니다.' : err.message;
-    return errorResponse(message, status);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return runNeo4j(validation.query, {}, env, request);
 }
 
-async function handleSeed(env) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-  try {
-    const check = await executeCypher('MATCH (u:User) RETURN count(u) AS users', env, controller.signal);
-    const already = Number(check.values?.[0]?.[0] ?? 0) > 0;
-    if (already) {
-      return new Response(JSON.stringify({ ok: true, seeded: false, error: 'already seeded' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
-
-    await executeCypher(SEED_CYPHER, env, controller.signal);
-    return new Response(JSON.stringify({ ok: true, seeded: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  } catch (err) {
-    const status = err.name === 'AbortError' ? 504 : 400;
-    const message = err.name === 'AbortError' ? 'Seed가 시간 초과되었습니다.' : err.message;
-    return errorResponse(message, status);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+async function handleSeed(request, env) {
+  return runNeo4j(SEED_CYPHER, {}, env, request);
 }
 
 export default {
@@ -212,7 +133,7 @@ export default {
     }
 
     if (pathname === '/seed' && request.method === 'POST') {
-      return handleSeed(env);
+      return handleSeed(request, env);
     }
 
     if (pathname === '/run' && request.method === 'POST') {
