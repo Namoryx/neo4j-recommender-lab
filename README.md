@@ -8,6 +8,8 @@
 3. DB가 비어있다면 **데이터 초기화(Seed)** 버튼을 눌러 샘플 그래프를 생성합니다.
 4. Seed가 끝나면 Post-Seed 퀘스트(유저/상품/추천)가 활성화됩니다.
 
+> ⚠️ 배포한 Worker가 쓰기 연산을 막고 있다면 Seed가 실패합니다. 샘플 데이터를 로드하려면 `/seed` 엔드포인트가 있는 배포나 쓰기가 허용된 러너를 사용하세요.
+
 ## Worker 엔드포인트
 - `POST https://neo4j-runner.neo4j-namoryx.workers.dev/run`
 - `POST https://neo4j-runner.neo4j-namoryx.workers.dev/seed`

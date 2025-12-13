@@ -102,6 +102,14 @@ export async function runCypher(cypher, params = {}) {
   }
 }
 
+const READ_ONLY_MESSAGE =
+  '현재 실행 중인 러너는 읽기 전용입니다. /seed 엔드포인트가 있는 배포나 쓰기가 허용된 러너에서 샘플 데이터를 로드하세요.';
+
+function isReadOnlyError(err) {
+  const message = err?.message || '';
+  return message.includes('쓰기 또는 위험 연산은 허용되지 않습니다.') || /HTTP\s*400/.test(message);
+}
+
 export async function seedData() {
   const { controller, clear } = withTimeout(10000);
   let primaryError = null;
@@ -132,6 +140,9 @@ export async function seedData() {
     await runCypher(SEED_CYPHER);
     return { ok: true, seeded: true, via: 'run' };
   } catch (err) {
+    if (isReadOnlyError(err)) {
+      return { ok: false, readOnly: true, error: READ_ONLY_MESSAGE };
+    }
     throw primaryError || err;
   }
 }
