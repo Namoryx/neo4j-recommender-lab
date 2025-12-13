@@ -1,4 +1,5 @@
-import { API_BASE, checkSeeded, seedData } from './api.js';
+import { checkSeeded, seedData } from './api.js';
+import { HEALTH_URL } from '../src/config.js';
 import { showOverlaySeedRequired, toast, setFeedback } from './render.js';
 import {
   availableQuests,
@@ -47,7 +48,7 @@ async function init() {
 async function refreshHealth() {
   if (!els.health) return;
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await fetch(HEALTH_URL);
     const text = await res.text();
     els.health.textContent = res.ok ? `Worker OK (${text})` : 'Worker 불안정';
   } catch (err) {
