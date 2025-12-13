@@ -21,6 +21,12 @@ export function checkResult(result, checker) {
       return evaluateSetExact(result, checker.expected);
     case 'contains_min':
       return evaluateContainsMin(result, checker.expected);
+    case 'rows_range':
+      return evaluateRowsRange(result, checker.expected, checker.feedback, checker.success);
+    case 'set_contains':
+      return evaluateSetContains(result, checker.expected, checker.success);
+    case 'rows_min':
+      return evaluateRowsMin(result, checker.expected, checker.success);
     default:
       return { correct: false, feedback: '지원하지 않는 채점 유형입니다.' };
   }
@@ -89,6 +95,100 @@ function evaluateContainsMin(result, expected) {
   }
 
   return { correct: true, feedback: '정답입니다! 🎉' };
+}
+
+function evaluateRowsRange(result, expected, feedback = {}, successMessage) {
+  const min = expected?.min;
+  const max = expected?.max;
+  const value = result.rows[0]?.[0];
+
+  if (result.rows.length === 0) {
+    return { correct: false, feedback: feedback.empty || '결과가 없습니다. MATCH 조건을 확인하세요.' };
+  }
+
+  if (typeof value !== 'number') {
+    return { correct: false, feedback: '결과가 숫자 형태로 반환되지 않았습니다.' };
+  }
+
+  if (min !== undefined && value < min) {
+    return { correct: false, feedback: feedback.low || `최소 ${min} 이상이어야 합니다.` };
+  }
+
+  if (max !== undefined && value > max) {
+    return { correct: false, feedback: feedback.high || `최대 ${max} 이하여야 합니다.` };
+  }
+
+  return { correct: true, feedback: successMessage || '정답입니다! 🎉' };
+}
+
+function evaluateSetContains(result, expected, successMessage) {
+  const key = expected?.key;
+  const expectedRows = expected?.rows || [];
+  const minimumRows = expected?.minimumRows;
+
+  if (!key) {
+    return { correct: false, feedback: 'set_contains 채점은 key가 필요합니다.' };
+  }
+
+  const keyIndex = result.columns.findIndex((c) => String(c).toLowerCase() === String(key).toLowerCase());
+  if (keyIndex === -1) {
+    return { correct: false, feedback: `${key} 컬럼을 반환하도록 RETURN 절을 확인하세요.` };
+  }
+
+  if (typeof minimumRows === 'number' && result.rows.length < minimumRows) {
+    return { correct: false, feedback: `최소 ${minimumRows}건 이상의 결과가 필요합니다.` };
+  }
+
+  const actualMap = new Map();
+  result.rows.forEach((row) => {
+    actualMap.set(String(row[keyIndex]), row);
+  });
+
+  for (const expectedRow of expectedRows) {
+    const expectedKeyIndex = (expected.columns || result.columns).findIndex(
+      (c) => String(c).toLowerCase() === String(key).toLowerCase()
+    );
+    const keyValue = expectedRow[expectedKeyIndex];
+    const actualRow = actualMap.get(String(keyValue));
+
+    if (!actualRow || !arraysEqualDeep([actualRow], [expectedRow])) {
+      return { correct: false, feedback: '필수 결과가 포함되어 있지 않습니다. MATCH나 WHERE 조건을 확인하세요.' };
+    }
+  }
+
+  return { correct: true, feedback: successMessage || '정답입니다! 🎉' };
+}
+
+function evaluateRowsMin(result, expected, successMessage) {
+  const minRows = expected?.minRows ?? 0;
+  const key = expected?.key;
+  const minValueColumn = expected?.minValueColumn;
+  const minValue = expected?.minValue;
+
+  if (result.rows.length < minRows) {
+    return { correct: false, feedback: `최소 ${minRows}행 이상의 결과가 필요합니다.` };
+  }
+
+  if (key) {
+    const keyIndex = result.columns.findIndex((c) => String(c).toLowerCase() === String(key).toLowerCase());
+    if (keyIndex === -1) {
+      return { correct: false, feedback: `${key} 컬럼을 반환하도록 RETURN 절을 확인하세요.` };
+    }
+  }
+
+  if (minValueColumn && minValue !== undefined) {
+    const valueIndex = result.columns.findIndex((c) => String(c).toLowerCase() === String(minValueColumn).toLowerCase());
+    if (valueIndex === -1) {
+      return { correct: false, feedback: `${minValueColumn} 컬럼을 반환하도록 RETURN 절을 확인하세요.` };
+    }
+
+    const tooLow = result.rows.some((row) => typeof row[valueIndex] === 'number' && row[valueIndex] < minValue);
+    if (tooLow) {
+      return { correct: false, feedback: `${minValueColumn} 값이 ${minValue} 이상이어야 합니다.` };
+    }
+  }
+
+  return { correct: true, feedback: successMessage || '정답입니다! 🎉' };
 }
 
 function deriveRowFeedback(actualResult, expectedRows) {
