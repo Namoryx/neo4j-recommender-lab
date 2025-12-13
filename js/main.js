@@ -1,6 +1,12 @@
 import { checkSeeded, seedData } from './api.js';
 import { showOverlaySeedRequired, toast, setFeedback } from './render.js';
-import { initDiagnostics, logDiagnostic, runHealthCheck, runReturnOneTest } from './diagnostics.js';
+import {
+  initDiagnostics,
+  logDiagnostic,
+  runHealthCheck,
+  runReturnOneTest,
+  showErrorBanner,
+} from './diagnostics.js';
 import {
   availableQuests,
   evaluate,
@@ -277,7 +283,11 @@ async function handleSeed(fromDiagnostics = false) {
   try {
     toast('Seed 실행 중...', 'info');
     const res = await seedData();
-    if (res?.ok === false) {
+    if (res?.readOnly) {
+      toast(res.error, 'error', 6000);
+      logDiagnostic('Seed 실패 (읽기 전용)', res.error);
+      showErrorBanner(res.error);
+    } else if (res?.ok === false) {
       toast(res.error || 'Seed 실패', 'error');
     } else if (res?.error === 'already seeded') {
       toast('이미 데이터가 있습니다(스킵)', 'success');
